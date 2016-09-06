@@ -57,6 +57,12 @@ options:
         used on personally controlled sites using self-signed certificates.
     required: false
     default: true
+  skip_shell_check:
+    description:
+      - If YES then module will not make HTTPS request to a F5 box trying to
+        find out a user shell type (tmsh or bash).
+    required: false
+    default: false
 notes:
   - Requires the paramiko Python package on the ansible host. This is as easy
     as pip install paramiko
@@ -75,6 +81,7 @@ EXAMPLES = '''
       password: "admin"
       command: "tmsh load sys config default"
       validate_certs: "no"
+      skip_shell_check: "yes"
   delegate_to: localhost
 '''
 
@@ -128,6 +135,9 @@ class BigIpCommon(object):
         self.params = kwargs
 
     def appliance_mode(self):
+        if self.params['skip_shell_check']:
+            return False
+
         user = self.params['user']
         server = self.params['server']
         password = self.params['password']
@@ -137,6 +147,9 @@ class BigIpCommon(object):
         headers = {
             'Content-Type': 'application/json'
         }
+
+        # Uncomment if only weak cipher can be used
+        # requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += ':RC4-SHA'
 
         resp = requests.get(uri,
                             auth=(user, password),
@@ -168,6 +181,7 @@ class BigIpSsh(BigIpCommon):
         if not validate_certs:
             self.api.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        self.api.load_system_host_keys()
         self.api.connect(server, username=user, password=password)
 
     def flush(self):
@@ -208,6 +222,7 @@ class BigIpSsh(BigIpCommon):
 
 def main():
     argument_spec = f5_argument_spec()
+    argument_spec['skip_shell_check'] = {'default': 'no', 'type': 'bool'}
 
     meta_args = dict(
         command=dict(required=True)
